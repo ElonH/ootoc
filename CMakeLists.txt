@@ -6,7 +6,7 @@ project(ootoc VERSION 0.1.0)
 add_subdirectory(lib)
 
 add_executable(ootoc main.cpp)
-target_link_libraries(ootoc PRIVATE Tar)
+target_link_libraries(ootoc PRIVATE Tar Curl)
 # set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 # set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 # include(CPack)
