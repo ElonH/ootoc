@@ -22,3 +22,9 @@ if(CURL_FOUND)
     target_include_directories(Curl INTERFACE ${CURL_INCLUDE_DIRS})
     target_link_libraries(Curl INTERFACE "${CURL_LIBRARIES}")
 endif()
+
+if(OOTOC_TEST)
+    # google test
+    set(INSTALL_GTEST OFF CACHE BOOL "Enable installation of googletest. (Projects embedding googletest may want to turn this OFF.)")
+    add_subdirectory(googletest)
+endif()
