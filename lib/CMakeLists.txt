@@ -34,3 +34,5 @@ if(OOTOC_TEST)
     set(INSTALL_GTEST OFF CACHE BOOL "Enable installation of googletest. (Projects embedding googletest may want to turn this OFF.)")
     add_subdirectory(googletest)
 endif()
+
+find_package(yaml-cpp 0.6.0 REQUIRED)
