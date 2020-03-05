@@ -1,20 +1,25 @@
-find_path(TAR_INCLUDE_DIR libtar.h
-    DOC "tar include directory")
-if(NOT TAR_INCLUDE_DIR)
-    message(FATAL_ERROR "Looking for libtar.h - not found")
-else()
-    message (STATUS "Looking for libtar.h - found")
-endif()
 
-find_library(TAR_LIBRARY tar
-    DOC "tar library location")
-if(NOT TAR_LIBRARY)
-    message(FATAL_ERROR "libtar library - not found")
-endif()
+SET(TAR_BIN "${CMAKE_CURRENT_BINARY_DIR}/libtar")
+SET(TAR_SRC "${CMAKE_CURRENT_SOURCE_DIR}/libtar")
+SET(TAR_INCLUDE "${TAR_BIN}/include")
+SET(TAR_LIB "${TAR_BIN}/lib/libtar.a")
+include(ExternalProject)
+ExternalProject_Add(
+    libtar
+    PREFIX ${TAR_BIN}
+    SOURCE_DIR ${TAR_SRC}
+    CONFIGURE_COMMAND cd ${TAR_SRC} && autoreconf --force --install
+    COMMAND ${TAR_SRC}/configure --srcdir=${TAR_SRC} --prefix=${TAR_BIN} --enable-static=yes --disable-shared
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) install
+    BUILD_BYPRODUCTS ${TAR_LIB}
+)
+add_library(Tar STATIC IMPORTED GLOBAL)
 
-add_library(Tar INTERFACE)
-target_include_directories(Tar INTERFACE ${TAR_INCLUDE_DIR})
-target_link_libraries(Tar INTERFACE ${TAR_LIBRARY})
+add_dependencies(Tar libtar)
+
+set_target_properties(Tar PROPERTIES IMPORTED_LOCATION ${TAR_LIB})
+set_target_properties(Tar PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${TAR_INCLUDE})
 
 find_package(CURL REQUIRED)
 if(CURL_FOUND)
