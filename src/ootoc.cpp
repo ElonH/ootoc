@@ -1,6 +1,7 @@
 #include "ootoc.h"
 #include <iostream>
 #include <regex>
+#include <yaml-cpp/yaml.h>
 
 extern "C"
 {
@@ -61,7 +62,8 @@ bool TarParser::Parse()
 {
     if (tar == nullptr)
         return false;
-    output = "";
+    YAML::Node node;
+    stringstream ss;
     while (!th_read(tar))
     {
         // th_print(tar);
@@ -71,15 +73,25 @@ bool TarParser::Parse()
         if (!TH_ISREG(tar))
             continue;
         string inner_path = th_get_pathname(tar);
+        auto offset = tar->offset;
+        auto fsize = th_get_size(tar);
         cout << inner_path << endl;
         cout << tar->offset << endl;
-        regex reg(".*?/Packages.gz$");
-        auto is_exist = regex_match(inner_path, reg);
-        if (is_exist)
-        {
-            cout << "true" << endl;
-        }
+        ss.str("");
+        ss << offset;
+        node[inner_path]["start"] = ss.str();
+        ss.str("");
+        ss << fsize;
+        node[inner_path]["size"] = ss.str();
+        // regex reg(".*?/Packages.gz$");
+        // auto is_exist = regex_match(inner_path, reg);
+        // if (is_exist)
+        //     cout << "true" << endl;
     }
+    ss.str("");
+    ss << node;
+    output = ss.str();
+    cout << output << endl;
     return true;
 }
 
