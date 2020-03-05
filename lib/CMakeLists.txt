@@ -13,6 +13,7 @@ ExternalProject_Add(
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND $(MAKE) install
     BUILD_BYPRODUCTS ${TAR_LIB}
+    BUILD_ALWAYS TRUE
 )
 add_library(Tar STATIC IMPORTED GLOBAL)
 
