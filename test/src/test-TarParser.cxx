@@ -10,9 +10,13 @@ using namespace ootoc;
 TEST(TarParser, test)
 {
     TarParser p;
-    p.Open("./test/data/Packages.tar");
-    p.Parse();
-    p.Close();
+    bool ret;
+    ret = p.Open("./test/data/Packages.tar");
+    ASSERT_EQ(ret, true);
+    ret = p.Parse();
+    ASSERT_EQ(ret, true);
+    ret = p.Close();
+    ASSERT_EQ(ret, true);
     auto f = fstream("./test/data/Tar.yml", ios::out);
     f << p.GetOutput();
     f.close();
