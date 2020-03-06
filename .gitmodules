@@ -4,3 +4,6 @@
 [submodule "lib/libtar"]
 	path = lib/libtar
 	url = https://github.com/ElonH/libtar.git
+[submodule "lib/cpp-httplib"]
+	path = lib/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git

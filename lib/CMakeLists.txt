@@ -36,3 +36,5 @@ if(OOTOC_TEST)
 endif()
 
 find_package(yaml-cpp 0.6.0 REQUIRED)
+
+add_subdirectory(cpp-httplib)
