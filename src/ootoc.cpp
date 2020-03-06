@@ -200,12 +200,13 @@ void OpkgServer::setServer(const string &addr, long port)
     {
         const auto inner_path = it.first.as<string>();
         this->svr.Get(("/" + inner_path).c_str(), [remote, inner_path](const Request &req, Response &res) {
-            string full_conts;
-            cout << "request (" << inner_path << ")" << endl;
-            remote->ExtractFile(inner_path, [&](const string &part_conts) {
-                full_conts += part_conts;
-            });
-            res.set_content(full_conts, "application/octet-stream");
+            res.set_chunked_content_provider(
+                [&](uint64_t offset, DataSink &sink) {
+                    remote->ExtractFile(inner_path, [&](const string &part_conts) {
+                        sink.write(part_conts.c_str(), part_conts.length());
+                    });
+                    sink.done();
+                });
         });
         cout << "http://" << addr << ':' << port << '/' << inner_path << endl;
     }
