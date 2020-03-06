@@ -5,34 +5,112 @@
 
 extern "C"
 {
-#include <curl/curl.h>
 #include <fcntl.h>
 }
 
 namespace ootoc
 {
-TarOverCurlSet::TarOverCurlSet(const string &tar_file_path)
+TarOverCurl::~TarOverCurl()
 {
-    if (tar_open(&tar, tar_file_path.c_str(), nullptr, O_RDONLY, 0, TAR_GNU | TAR_VERBOSE) != 0)
-    {
-        std::cerr << "Fail to open file " << tar_file_path << std::endl;
-        exit(1);
-    }
-    while (!th_read(tar))
-    {
-        std::string filename = th_get_pathname(tar);
-        std::cout << filename << std::endl;
-        th_print(tar);
-        th_print_long_ls(tar);
-    }
 }
 
-TarOverCurlSet::~TarOverCurlSet()
+#define quick_return_false(ret) \
+    if (ret != CURLE_OK)        \
+    return false
+
+bool TarOverCurl::ReInitCurl()
 {
-    if (tar)
+    curl_easy_reset(curl);
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_URL, url.c_str()));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L));
+    return true;
+}
+
+bool TarOverCurl::ExecuteCurl()
+{
+    quick_return_false(curl_easy_perform(curl));
+    long response_code;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+    cout << response_code << endl;
+    if (response_code == 206)
+        return true;
+    cerr << "can't not connected." << endl;
+    return false;
+}
+
+bool TarOverCurl::Open(const string &url, const string &fastAux)
+{
+    this->url = url;
+    this->aux = fastAux;
+    // valiate aux
+    auto node = YAML::Load(aux);
+    if (!node.IsMap())
+        return false;
+    cout << "aux file loaded." << endl;
+    // valiate url
+    if (curl)
+        curl_easy_cleanup(curl);
+    curl = curl_easy_init();
+    if (curl == nullptr)
+        return false;
+    if (!ReInitCurl())
+        return false;
+    /* 
+    * NOTE: Leader '+' trigger conversion from non-captured Lambda Object to plain C pointer
+    * refs: https://stackoverflow.com/a/58154943/12118675
+    */
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                                        +[](void *contents, size_t size, size_t nmemb, void *userp) -> size_t {
+                                            auto realsize = size * nmemb;
+                                            // cout << realsize << endl;
+                                            return realsize;
+                                        }));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, "0-1"));
+    if (!ExecuteCurl())
+        return false;
+    cout << "url connected." << endl;
+    return true;
+}
+
+bool TarOverCurl::ExtractFile(const string &inner_path, std::function<void(const string &)> &&handler)
+{
+    auto node = YAML::Load(aux);
+    if (node[inner_path])
     {
-        tar_close(tar);
-        tar = nullptr;
+        auto beg = node[inner_path]["start"].as<string>();
+        auto end = node[inner_path]["end"].as<string>();
+        if (!ReInitCurl())
+            return false;
+        quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, (beg + "-" + end).c_str()));
+        cout << "fetching data: " + beg + "-" + end << endl;
+        quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &handler));
+        quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                                            +[](char *contents, size_t size, size_t nmemb,
+                                                const std::function<void(const string &)> *hptr) -> size_t {
+                                                auto realsize = size * nmemb;
+                                                auto &handler = *hptr;
+                                                // cout << string(contents, contents + realsize) << endl;
+                                                handler(string(contents, contents + realsize));
+                                                // cout << realsize << endl;
+                                                return realsize;
+                                            }));
+        if (!ExecuteCurl())
+            return false;
+        cout << "extract file success: " << inner_path << endl;
+        return true;
+    }
+    return false;
+}
+
+bool TarOverCurl::Close()
+{
+    if (curl)
+    {
+        curl_easy_cleanup(curl);
+        curl = nullptr;
     }
 }
 
@@ -72,7 +150,7 @@ bool TarParser::Parse()
             continue;
         string inner_path = th_get_pathname(tar);
         auto sta = tar->offset;
-        auto end = sta -1 + th_get_size(tar);
+        auto end = sta - 1 + th_get_size(tar);
         cout << inner_path << endl;
         cout << tar->offset << endl;
         ss.str("");
