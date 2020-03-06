@@ -12,6 +12,7 @@ namespace ootoc
 {
 TarOverCurl::~TarOverCurl()
 {
+    Close();
 }
 
 #define quick_return_false(ret) \
@@ -85,7 +86,8 @@ bool TarOverCurl::ExtractFile(const string &inner_path, std::function<void(const
         if (!ReInitCurl())
             return false;
         quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, (beg + "-" + end).c_str()));
-        cout << "fetching data: " + beg + "-" + end << endl;
+        cout << "Tar url: " << url << endl;
+        cout << "fetching data range: " + beg + "-" + end << endl;
         quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &handler));
         quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
                                             +[](char *contents, size_t size, size_t nmemb,
@@ -176,6 +178,46 @@ bool TarParser::Parse()
 const string &TarParser::GetOutput()
 {
     return this->output;
+}
+
+void OpkgServer::setRemoteTar(const string &url, const string &fastaux)
+{
+    remote.Open(url, fastaux);
+    aux = fastaux;
+}
+
+void OpkgServer::setServer(const string &addr, long port)
+{
+    this->addr = addr;
+    this->port = port;
+    using namespace httplib;
+    auto node = YAML::Load(aux);
+    if (!node.IsMap())
+        return;
+    cout << "aux file loaded." << endl;
+    auto remote = &this->remote;
+    for (auto &&it : node)
+    {
+        const auto inner_path = it.first.as<string>();
+        this->svr.Get(("/" + inner_path).c_str(), [remote, inner_path](const Request &req, Response &res) {
+            string full_conts;
+            cout << "request (" << inner_path << ")" << endl;
+            remote->ExtractFile(inner_path, [&](const string &part_conts) {
+                full_conts += part_conts;
+            });
+            res.set_content(full_conts, "application/octet-stream");
+        });
+        cout << "http://" << addr << ':' << port << '/' << inner_path << endl;
+    }
+    svr.Get("/Packages/txt/", [](const Request &req, Response &res) {
+        res.set_content("Hello World!", "text/plain");
+    });
+}
+
+void OpkgServer::Start()
+{
+    svr.listen(addr.c_str(), port);
+    cout << "listen error" << endl;
 }
 
 } // namespace ootoc

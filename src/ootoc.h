@@ -4,6 +4,7 @@ extern "C"
 #include <libtar.h>
 }
 #include <functional>
+#include <httplib.h>
 #include <string>
 
 namespace ootoc
@@ -22,6 +23,7 @@ public:
     bool Open(const string &url, const string &fastAux);
     bool ExtractFile(const string &inner_path, std::function<void(const string &)> &&);
     bool Close();
+
 protected:
     bool ReInitCurl();
     bool ExecuteCurl();
@@ -39,5 +41,19 @@ public:
     bool Close();
     bool Parse();
     const string &GetOutput();
+};
+
+class OpkgServer
+{
+    httplib::Server svr;
+    string aux = "";
+    TarOverCurl remote;
+    string addr;
+    long port;
+
+public:
+    void setRemoteTar(const string&url, const string& fastaux);
+    void setServer(const string &addr, long port);
+    void Start();
 };
 } // namespace ootoc
