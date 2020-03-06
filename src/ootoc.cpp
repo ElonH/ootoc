@@ -210,9 +210,6 @@ void OpkgServer::setServer(const string &addr, long port)
         });
         cout << "http://" << addr << ':' << port << '/' << inner_path << endl;
     }
-    svr.Get("/Packages/txt/", [](const Request &req, Response &res) {
-        res.set_content("Hello World!", "text/plain");
-    });
 }
 
 void OpkgServer::Start()
