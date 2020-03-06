@@ -7,8 +7,8 @@ foreach(file ${files})
     add_executable("${fileName}" "${file}")
 
     target_link_libraries("${fileName}" PRIVATE gtest_main ootoc)
-    # gtest_discover_tests(
-    #     "${fileName}"
-    #     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-    # )
+    gtest_discover_tests(
+        "${fileName}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    )
 endforeach()

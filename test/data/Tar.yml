@@ -1,0 +1,27 @@
+Packages/packages/x86_64/routing/Packages:
+  start: 2560
+  end: 3267
+Packages/packages/x86_64/routing/batctl-default_2019.5-0_x86_64.ipk:
+  start: 4096
+  end: 49663
+Packages/packages/x86_64/routing/bmx7-json_7.1.1-2_x86_64.ipk:
+  start: 50176
+  end: 58700
+Packages/packages/x86_64/routing/Packages.gz:
+  start: 59392
+  end: 59855
+Packages/packages/x86_64/routing/Packages.manifest:
+  start: 60416
+  end: 61372
+Packages/packages/x86_64/routing/Packages.sig:
+  start: 61952
+  end: 62102
+Packages/packages/x86_64/routing/bmx7_7.1.1-2_x86_64.ipk:
+  start: 62976
+  end: 234040
+Packages/packages/x86_64/routing/ahcpd_0.53-3_x86_64.ipk:
+  start: 235008
+  end: 258264
+Packages/txt/README.md:
+  start: 259584
+  end: 259601
