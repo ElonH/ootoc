@@ -13,6 +13,7 @@ TEST(TarOverCurl, test)
     fstream auxstm("./test/data/Tar.yml", ios::in);
     string content((std::istreambuf_iterator<char>(auxstm)),
                    (std::istreambuf_iterator<char>()));
+    auxstm.close();
     TarOverCurl toc;
     bool ret;
     ret = toc.Open("https://github.com/ElonH/ootoc/releases/download/test/Packages.tar", content);
