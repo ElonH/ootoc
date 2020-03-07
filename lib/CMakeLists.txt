@@ -38,3 +38,5 @@ endif()
 find_package(yaml-cpp 0.6.0 REQUIRED)
 
 add_subdirectory(cpp-httplib)
+
+add_subdirectory(CLI11)
