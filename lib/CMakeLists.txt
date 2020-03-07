@@ -20,6 +20,7 @@ add_library(Tar STATIC IMPORTED GLOBAL)
 add_dependencies(Tar libtar)
 
 set_target_properties(Tar PROPERTIES IMPORTED_LOCATION ${TAR_LIB})
+execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${TAR_INCLUDE}")
 set_target_properties(Tar PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${TAR_INCLUDE})
 
 find_package(CURL REQUIRED)
