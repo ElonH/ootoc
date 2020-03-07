@@ -4,4 +4,4 @@ add_library(ootoc ootoc.cpp)
 target_link_libraries(ootoc PUBLIC yaml-cpp Tar httplib Curl Threads::Threads)
 
 add_executable(ootocCLI main.cpp)
-target_link_libraries(ootocCLI PRIVATE ootoc)
+target_link_libraries(ootocCLI PRIVATE ootoc CLI11::CLI11)
