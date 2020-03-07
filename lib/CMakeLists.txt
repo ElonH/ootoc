@@ -1,24 +1,27 @@
 
 SET(TAR_BIN "${CMAKE_CURRENT_BINARY_DIR}/libtar")
 SET(TAR_SRC "${CMAKE_CURRENT_SOURCE_DIR}/libtar")
-SET(TAR_INCLUDE "${TAR_BIN}/include")
-SET(TAR_LIB "${TAR_BIN}/lib/libtar.a")
-include(ExternalProject)
-ExternalProject_Add(
-    libtar
-    PREFIX ${TAR_BIN}
-    SOURCE_DIR ${TAR_SRC}
-    CONFIGURE_COMMAND cd ${TAR_SRC} && autoreconf --force --install
-    COMMAND ${TAR_SRC}/configure --srcdir=${TAR_SRC} --prefix=${TAR_BIN} --enable-static=yes --disable-shared
-    BUILD_COMMAND $(MAKE)
-    INSTALL_COMMAND $(MAKE) install
-    BUILD_BYPRODUCTS ${TAR_LIB}
-    BUILD_ALWAYS TRUE
-)
-add_library(Tar STATIC IMPORTED GLOBAL)
+SET(TAR_INCLUDE "${TAR_BIN}/include" CACHE PATH "libtar include directory")
+SET(TAR_LIB "${TAR_BIN}/lib/libtar.a" CACHE FILEPATH "libtar library")
 
-add_dependencies(Tar libtar)
+option(OOTOC_BUILDIN_LIBTAR "Using build-in libtar, otherwise find libtar in system" ON)
+if(OOTOC_BUILDIN_LIBTAR)
+    include(ExternalProject)
+    ExternalProject_Add(
+        libtar
+        PREFIX ${TAR_BIN}
+        SOURCE_DIR ${TAR_SRC}
+        CONFIGURE_COMMAND cd ${TAR_SRC} && autoreconf --force --install
+        COMMAND ${TAR_SRC}/configure --srcdir=${TAR_SRC} --prefix=${TAR_BIN} --enable-static=yes --disable-shared
+        BUILD_COMMAND $(MAKE)
+        INSTALL_COMMAND $(MAKE) install
+        BUILD_BYPRODUCTS ${TAR_LIB}
+        BUILD_ALWAYS TRUE
+    )
+    add_library(Tar STATIC IMPORTED GLOBAL)
 
+    add_dependencies(Tar libtar)
+endif()
 set_target_properties(Tar PROPERTIES IMPORTED_LOCATION ${TAR_LIB})
 execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${TAR_INCLUDE}")
 set_target_properties(Tar PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${TAR_INCLUDE})
