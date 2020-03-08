@@ -4,7 +4,7 @@ extern "C"
 #include <libtar.h>
 }
 #include <functional>
-#include <httplib.h>
+#include <httplib/httplib.h>
 #include <string>
 
 namespace ootoc

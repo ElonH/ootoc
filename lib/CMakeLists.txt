@@ -65,6 +65,12 @@ endif()
 
 find_package(yaml-cpp 0.6.0 REQUIRED)
 
-add_subdirectory(cpp-httplib)
+OPTION(OOTOC_BUILDIN_HTTPLIB "Using build-in httplib, otherwise find libtar in system" ON)
+if(OOTOC_BUILDIN_HTTPLIB)
+    add_subdirectory(httplib)
+    include_directories(.)
+else()
+    find_package(httplib REQUIRED)
+endif()
 
 add_subdirectory(CLI11)
