@@ -4,6 +4,7 @@ project(ootoc VERSION 0.1.0)
 option(OOTOC_TEST "" ON)
 include_directories(src)
 
+include_directories(lib)
 add_subdirectory(lib)
 add_subdirectory(src)
 
