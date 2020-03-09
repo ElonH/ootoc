@@ -201,26 +201,41 @@ void OpkgServer::setServer(const string &addr, long port)
         const auto inner_path = it.first.as<string>();
         auto beg = node[inner_path]["start"].as<unsigned long long>();
         auto end = node[inner_path]["end"].as<unsigned long long>();
-        auto size = end - beg +1;
+        auto size = end - beg + 1;
         this->svr.Get(("/" + inner_path).c_str(), [remote, inner_path, size](const Request &req, Response &res) {
-            res.set_chunked_content_provider(
-                [&](uint64_t offset, DataSink &sink) {
-                    unsigned long long progress = 0;
-                    remote->ExtractFile(inner_path, [&](const string &part_conts) {
-                        sink.write(part_conts.c_str(), part_conts.length());
-                        progress += part_conts.length();
-                        cout << "\rProgress: " << progress << "/" << size << " \t"<<((double) progress)/size*100 << "%     " << flush;
-                    });
-                    cout << endl;
-                    sink.done();
+            auto mtx = make_shared<std::mutex>();
+            auto data = make_shared<string>(); // TODO: redule useless memory space
+            thread in_coming([&inner_path, &remote, size, mtx, data]() {
+                unsigned long long progress = 0;
+                remote->ExtractFile(inner_path, [mtx, data, &progress, size](const string &part_conts) {
+                    lock_guard<std::mutex> lock(*mtx);
+                    *data += part_conts;
+                    progress += part_conts.length();
+                    cout << "\rDownload Progress: " << progress << "/" << size << " \t" << ((double)progress) / size * 100 << "%     " << flush;
                 });
+                cout << endl;
+            });
+            thread out_coming([mtx, data, size, &res]() {
+                res.set_content_provider(
+                    size, // Content length
+                    [mtx, data, size](uint64_t offset, uint64_t length, DataSink &sink) {
+                        lock_guard<std::mutex> lock(*mtx);
+                        // FIXUP: calculate error
+                        cout << "\rUpload Progress: " << size - length << "/" << size << " \t" << ((double)size - length) / size * 100 << "%     " << flush;
+                        auto d = data->c_str();
+                        sink.write(&d[offset], min(length, data->length() - offset));
+                    });
+                cout << endl;
+            });
+            in_coming.join();
+            out_coming.join();
         });
         static int num = 1;
         if (regex_match(inner_path, reg))
             cout << "src/gz " << num++ << " http://" << addr << ':' << port << '/' << inner_path.substr(0, inner_path.size() - 12) << endl;
     }
     cout << "prepared." << endl;
-}
+} // namespace ootoc
 
 void OpkgServer::Start()
 {
