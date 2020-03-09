@@ -1,7 +1,6 @@
 #include "ootoc.h"
 #include <iostream>
 #include <regex>
-#include <yaml-cpp/yaml.h>
 
 extern "C"
 {
@@ -86,7 +85,7 @@ bool TarOverCurl::ExtractFile(const string &inner_path, std::function<void(const
         if (!ReInitCurl())
             return false;
         quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, (beg + "-" + end).c_str()));
-        cout << "Tar url: " << url << endl;
+        // cout << "Tar url: " << url << endl;
         cout << "fetching data range: " + beg + "-" + end << endl;
         quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &handler));
         quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
@@ -196,20 +195,31 @@ void OpkgServer::setServer(const string &addr, long port)
         return;
     cout << "aux file loaded." << endl;
     auto remote = &this->remote;
+    regex reg(".*?/Packages.gz$");
     for (auto &&it : node)
     {
         const auto inner_path = it.first.as<string>();
-        this->svr.Get(("/" + inner_path).c_str(), [remote, inner_path](const Request &req, Response &res) {
+        auto beg = node[inner_path]["start"].as<unsigned long long>();
+        auto end = node[inner_path]["end"].as<unsigned long long>();
+        auto size = end - beg +1;
+        this->svr.Get(("/" + inner_path).c_str(), [remote, inner_path, size](const Request &req, Response &res) {
             res.set_chunked_content_provider(
                 [&](uint64_t offset, DataSink &sink) {
+                    unsigned long long progress = 0;
                     remote->ExtractFile(inner_path, [&](const string &part_conts) {
                         sink.write(part_conts.c_str(), part_conts.length());
+                        progress += part_conts.length();
+                        cout << "\rProgress: " << progress << "/" << size << " \t"<<((double) progress)/size*100 << "%     " << flush;
                     });
+                    cout << endl;
                     sink.done();
                 });
         });
-        cout << "http://" << addr << ':' << port << '/' << inner_path << endl;
+        static int num = 1;
+        if (regex_match(inner_path, reg))
+            cout << "src/gz " << num++ << " http://" << addr << ':' << port << '/' << inner_path.substr(0, inner_path.size() - 12) << endl;
     }
+    cout << "prepared." << endl;
 }
 
 void OpkgServer::Start()

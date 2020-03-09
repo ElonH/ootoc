@@ -6,6 +6,7 @@ extern "C"
 #include <functional>
 #include <httplib/httplib.h>
 #include <string>
+#include <yaml-cpp/yaml.h>
 
 namespace ootoc
 {
