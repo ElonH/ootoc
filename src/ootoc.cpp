@@ -213,22 +213,23 @@ void OpkgServer::setServer(const string &addr, long port)
                     progress += part_conts.length();
                     cout << "\rDownload Progress: " << progress << "/" << size << " \t" << ((double)progress) / size * 100 << "%     " << flush;
                 });
-                cout << endl;
+                cout << "Download completed." << endl;
             });
             thread out_coming([mtx, data, size, &res]() {
                 res.set_content_provider(
                     size, // Content length
                     [mtx, data, size](uint64_t offset, uint64_t length, DataSink &sink) {
                         lock_guard<std::mutex> lock(*mtx);
-                        // FIXUP: calculate error
-                        cout << "\rUpload Progress: " << size - length << "/" << size << " \t" << ((double)size - length) / size * 100 << "%     " << flush;
+                        cout << "\rUpload Progress: " << offset << "/" << size << " \t" << ((double)offset) / size * 100 << "%     " << flush;
                         auto d = data->c_str();
                         sink.write(&d[offset], min(length, data->length() - offset));
+                    },
+                    []() {
+                        cout << "Upload completed." << endl;
                     });
-                cout << endl;
             });
-            in_coming.join();
             out_coming.join();
+            in_coming.join();
         });
         static int num = 1;
         if (regex_match(inner_path, reg))
