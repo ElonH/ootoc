@@ -9,15 +9,19 @@ int main(int argc, char **argv)
 
     auto appSvr = app.add_subcommand("server", "start ootoc server");
     auto appPsr = app.add_subcommand("parse", "parse tar archive file");
+    auto appSub = app.add_subcommand("subscription", "output subscription of server");
 
     string addr = "127.0.0.1";
     appSvr->add_option("--addr", addr);
+    appSub->add_option("--addr", addr);
     int port = 21730;
-    appSvr->add_option("--port", port)->check(CLI::Range(1 << 15));
+    appSvr->add_option("--port", port);
+    appSub->add_option("--port", port);
     string url;
     appSvr->add_option("--url", url)->required();
     string aux;
     appSvr->add_option("--aux", aux)->required();
+    appSub->add_option("--in,-i", aux)->required();
     appPsr->add_option("--in,-i", aux, "tar file")->required();
 
     string out;
@@ -34,6 +38,15 @@ int main(int argc, char **argv)
         server.setRemoteTar(url, aux_content);
         server.setServer(addr, port);
         server.Start();
+    });
+
+    appSub->callback([&](){
+        fstream auxstm(aux, ios::in);
+        string aux_content((std::istreambuf_iterator<char>(auxstm)),
+                           (std::istreambuf_iterator<char>()));
+        auxstm.close();
+
+        cout << OpkgServer::getSubscription(addr, port, aux_content) << endl;
     });
 
     appPsr->callback([&]() {

@@ -76,6 +76,7 @@ class OpkgServer
 public:
     void setRemoteTar(const string &url, const string &fastaux);
     void setServer(const string &addr, long port);
+    static string getSubscription(const string& addr, long port, const string& aux);
     void Start();
 };
 } // namespace ootoc

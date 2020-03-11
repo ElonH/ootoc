@@ -236,7 +236,22 @@ void OpkgServer::setServer(const string &addr, long port)
             cout << "src/gz " << num++ << " http://" << addr << ':' << port << '/' << inner_path.substr(0, inner_path.size() - 12) << endl;
     }
     cout << "prepared." << endl;
-} // namespace ootoc
+}
+
+string OpkgServer::getSubscription(const string &addr, long port, const string &aux)
+{
+    auto node = YAML::Load(aux);
+    regex reg(".*?/Packages.gz$");
+    stringstream ss;
+    for (auto &&it : node)
+    {
+        const auto inner_path = it.first.as<string>();
+        static int num = 1;
+        if (regex_match(inner_path, reg))
+            ss << "src/gz " << num++ << " http://" << addr << ':' << port << '/' << inner_path.substr(0, inner_path.size() - 12) << endl;
+    }
+    return ss.str();
+}
 
 void OpkgServer::Start()
 {
