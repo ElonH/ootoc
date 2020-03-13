@@ -45,3 +45,4 @@ jobs:
           cmake -DOOTOC_BUILDIN_LIBTAR:BOOL=OFF .
           make
           make test
+          sudo make install
