@@ -76,12 +76,16 @@ class OpkgServer
 {
     httplib::Server svr;
     string aux = "";
+    string aux_url = "";
+    string aux_path = "";
     TarOverCurl remote;
     string addr;
     long port;
 
 public:
-    void setRemoteTar(const string &url, const string &fastaux);
+    void setAuxUrl(const string& url, const string& path);
+    bool fetchAux();
+    void setRemoteTar(const string &url);
     void setServer(const string &addr, long port);
     static string getSubscription(const string& addr, long port, const string& aux);
     void Start();

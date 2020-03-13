@@ -174,6 +174,7 @@ bool TarOverCurl::Close()
         curl_easy_cleanup(curl);
         curl = nullptr;
     }
+    return true;
 }
 
 TarParser::~TarParser()
@@ -240,14 +241,57 @@ const string &TarParser::GetOutput()
     return this->output;
 }
 
-void OpkgServer::setRemoteTar(const string &url, const string &fastaux)
+void OpkgServer::setAuxUrl(const string &url, const string &path)
 {
-    remote.Open(url, fastaux);
-    aux = fastaux;
+    aux_url = url;
+    aux_path = path;
+    fstream auxstm(aux_path, ios::in);
+    string aux_content((std::istreambuf_iterator<char>(auxstm)),
+                       (std::istreambuf_iterator<char>()));
+    auxstm.close();
+    aux = aux_content;
+}
+
+bool OpkgServer::fetchAux()
+{
+    string remote_aux_content;
+    spdlog::log(level::info, fmt::format("fetching aux from {}", aux_url));
+    auto curl = curl_easy_init();
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_URL, aux_url.c_str()));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &remote_aux_content));
+    quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                                        +[](char *contents, size_t size, size_t nmemb,
+                                            string *dataptr) -> size_t {
+                                            auto realsize = size * nmemb;
+                                            auto &remote_aux_content = *dataptr;
+                                            remote_aux_content += string(contents, contents + realsize);
+                                            if (realsize)
+                                                spdlog::log(level::debug, fmt::format("aux progress: {}", remote_aux_content.size()));
+                                            return realsize;
+                                        }));
+    quick_return_false(curl_easy_perform(curl));
+    spdlog::log(level::info, "fetch aux completed.");
+    aux = remote_aux_content;
+    ofstream ofs(aux_path, ios::out);
+    ofs << aux;
+    ofs.close();
+    spdlog::log(level::info, "saved aux.");
+    return true;
+}
+
+void OpkgServer::setRemoteTar(const string &url)
+{
+    remote.Open(url, aux);
 }
 
 void OpkgServer::setServer(const string &addr, long port)
 {
+    if (aux_url != "" && aux == "" && !fetchAux())
+        spdlog::log(level::err, "fetching remote aux error.");
     this->addr = addr;
     this->port = port;
     using namespace httplib;

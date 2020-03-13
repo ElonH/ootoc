@@ -27,6 +27,8 @@ int main(int argc, char **argv)
     appSvr->add_option("--aux", aux)->required();
     appSub->add_option("--in,-i", aux)->required();
     appPsr->add_option("--in,-i", aux, "tar file")->required();
+    string online_aux = "";
+    appSvr->add_option("--aux-url", online_aux);
 
     string out;
     appPsr->add_option("--out,-o", out, "output result[yaml file]")->required();
@@ -34,18 +36,15 @@ int main(int argc, char **argv)
     // app.callback([&]() { cout << app.help() << endl; });
     appSvr->callback([&]() {
         Logger::start(log_path);
-        fstream auxstm(aux, ios::in);
-        string aux_content((std::istreambuf_iterator<char>(auxstm)),
-                           (std::istreambuf_iterator<char>()));
-        auxstm.close();
-
         OpkgServer server;
-        server.setRemoteTar(url, aux_content);
+        
+        server.setAuxUrl(online_aux, aux);
+        server.setRemoteTar(url);
         server.setServer(addr, port);
         server.Start();
     });
 
-    appSub->callback([&](){
+    appSub->callback([&]() {
         Logger::start(log_path);
         fstream auxstm(aux, ios::in);
         string aux_content((std::istreambuf_iterator<char>(auxstm)),
