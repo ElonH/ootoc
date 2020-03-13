@@ -325,10 +325,17 @@ void OpkgServer::setServer(const string &addr, long port)
             res.set_content_provider(
                 size, // Content length
                 [mtx, data, size](uint64_t offset, uint64_t length, DataSink &sink) {
-                    lock_guard<std::mutex> lock(*mtx);
+                    mtx->lock();
+                    if (data->length() - offset == 0)
+                    {
+                        mtx->unlock();
+                        std::this_thread::sleep_for(2s);
+                        return;
+                    }
                     spdlog::log(level::debug, "Upload Progress: {}/{} \t{}%", offset, size, ((double)offset) / size * 100);
                     auto d = data->c_str();
                     sink.write(&d[offset], min(length, data->length() - offset));
+                    mtx->unlock();
                 },
                 []() {
                     spdlog::log(level::info, "Upload completed.");
