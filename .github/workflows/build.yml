@@ -32,8 +32,16 @@ jobs:
           cmake -DSPDLOG_BUILD_TESTS:BOOL=OFF -DSPDLOG_BUILD_SHARED:BOOL=ON -DSPDLOG_BUILD_EXAMPLE:BOOL=OFF .
           make
           sudo make install
+      - name: libtar
+        run: |
+          git clone https://github.com/ElonH/libtar.git
+          cd libtar
+          autoreconf --force --install
+          ./configure
+          make
+          sudo make install
       - name: Make
         run: |
-          cmake .
+          cmake -DOOTOC_BUILDIN_LIBTAR:BOOL=OFF .
           make
           make test
