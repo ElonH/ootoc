@@ -288,6 +288,11 @@ void OpkgServer::setRemoteTar(const string &url)
     remote.Open(url, aux);
 }
 
+void OpkgServer::setSubscription(const string &sub_path)
+{
+    subscription = sub_path;
+}
+
 void OpkgServer::setServer(const string &addr, long port)
 {
     if (aux_url != "" && aux == "" && !fetchAux())
@@ -301,6 +306,7 @@ void OpkgServer::setServer(const string &addr, long port)
     spdlog::log(level::info, "aux file loaded.");
     auto remote = &this->remote;
     regex reg(".*?/Packages.gz$");
+    stringstream ss;
     for (auto &&it : node)
     {
         const auto inner_path = it.first.as<string>();
@@ -344,26 +350,17 @@ void OpkgServer::setServer(const string &addr, long port)
         });
         static int num = 1;
         if (regex_match(inner_path, reg))
-            spdlog::log(level::info, fmt::format("src/gz {} http://{}:{}/{}", num++, addr, port, inner_path.substr(0, inner_path.size() - 12)));
+            ss << fmt::format("src/gz {} http://{}:{}/{}", num++, addr, port, inner_path.substr(0, inner_path.size() - 12)) << endl;
+    }
+    spdlog::log(level::info, ss.str());
+    if (subscription != "")
+    {
+        ofstream ofs(subscription, ios::out);
+        ofs << ss.str();
+        ofs.close();
+        spdlog::log(level::info, fmt::format("subscription saved to {}", subscription));
     }
     spdlog::log(level::info, "prepared.");
-}
-
-string OpkgServer::getSubscription(const string &addr, long port)
-{
-    if (aux_url != "" && aux == "" && !fetchAux())
-        spdlog::log(level::err, "fetching remote aux error.");
-    auto node = YAML::Load(aux);
-    regex reg(".*?/Packages.gz$");
-    stringstream ss;
-    for (auto &&it : node)
-    {
-        const auto inner_path = it.first.as<string>();
-        static int num = 1;
-        if (regex_match(inner_path, reg))
-            ss << "src/gz " << num++ << " http://" << addr << ':' << port << '/' << inner_path.substr(0, inner_path.size() - 12) << endl;
-    }
-    return ss.str();
 }
 
 void OpkgServer::Start()

@@ -80,14 +80,15 @@ class OpkgServer
     string aux_path = "";
     TarOverCurl remote;
     string addr;
+    string subscription;
     long port;
 
 public:
+    void setSubscription(const string& sub_path);
     void setAuxUrl(const string& url, const string& path);
     bool fetchAux();
     void setRemoteTar(const string &url);
     void setServer(const string &addr, long port);
-    string getSubscription(const string &addr, long port);
     void Start();
 };
 } // namespace ootoc
