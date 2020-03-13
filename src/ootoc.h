@@ -11,6 +11,13 @@ extern "C"
 namespace ootoc
 {
 using namespace std;
+
+class Logger
+{
+    public:
+    static void start(const string& file_path = "");
+};
+
 class TarOverCurl
 {
     // TAR *tar = nullptr;

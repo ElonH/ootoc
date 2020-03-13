@@ -11,6 +11,10 @@ int main(int argc, char **argv)
     auto appPsr = app.add_subcommand("parse", "parse tar archive file");
     auto appSub = app.add_subcommand("subscription", "output subscription of server");
 
+    string log_path = "";
+    appSvr->add_option("--log,-l", log_path, "log file, otherwise output log to console");
+    appPsr->add_option("--log,-l", log_path, "log file, otherwise output log to console");
+    appSub->add_option("--log,-l", log_path, "log file, otherwise output log to console");
     string addr = "127.0.0.1";
     appSvr->add_option("--addr", addr);
     appSub->add_option("--addr", addr);
@@ -29,6 +33,7 @@ int main(int argc, char **argv)
 
     // app.callback([&]() { cout << app.help() << endl; });
     appSvr->callback([&]() {
+        Logger::start(log_path);
         fstream auxstm(aux, ios::in);
         string aux_content((std::istreambuf_iterator<char>(auxstm)),
                            (std::istreambuf_iterator<char>()));
@@ -41,6 +46,7 @@ int main(int argc, char **argv)
     });
 
     appSub->callback([&](){
+        Logger::start(log_path);
         fstream auxstm(aux, ios::in);
         string aux_content((std::istreambuf_iterator<char>(auxstm)),
                            (std::istreambuf_iterator<char>()));
@@ -50,6 +56,7 @@ int main(int argc, char **argv)
     });
 
     appPsr->callback([&]() {
+        Logger::start(log_path);
         TarParser psr;
         psr.Open(aux);
         psr.Parse();

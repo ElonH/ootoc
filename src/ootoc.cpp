@@ -1,4 +1,8 @@
 #include "ootoc.h"
+#include "spdlog/details/log_msg_buffer.h"
+#include "spdlog/details/null_mutex.h"
+#include "spdlog/sinks/base_sink.h"
+#include "spdlog/spdlog.h"
 #include <iostream>
 #include <regex>
 
@@ -9,6 +13,63 @@ extern "C"
 
 namespace ootoc
 {
+
+namespace
+{
+using namespace spdlog;
+using namespace spdlog::sinks;
+class ootoc_sink final : public base_sink<std::mutex>
+{
+public:
+    explicit ootoc_sink(const string &log_path)
+    {
+        if (log_path == "")
+        {
+            ofs = &cout;
+            isCout = true;
+            return;
+        }
+        isCout = false;
+        ofs = new ofstream(log_path, ios::out);
+    }
+    ~ootoc_sink()
+    {
+        if (!isCout)
+            free(ofs);
+    }
+
+protected:
+    bool isCout = true;
+    ostream *ofs;
+    void sink_it_(const details::log_msg &msg) override
+    {
+        memory_buf_t formatted;
+        base_sink<std::mutex>::formatter_->format(msg, formatted);
+        // strip Line feed, due to DebugLog will auto add Line feed.
+        auto &stream = *ofs;
+        stream << fmt::to_string(formatted);
+        stream.flush();
+    }
+    void flush_() override {}
+};
+} // namespace
+
+void Logger::start(const string &file_path)
+{
+    try
+    {
+        auto default_logger = make_shared<ootoc_sink>(file_path);
+        default_logger->set_level(spdlog::level::debug);
+        default_logger->set_pattern("[%n] [%T.%e] [%t] [%^%l%$] %v");
+        spdlog::set_default_logger(make_shared<spdlog::logger>("ootoc", default_logger));
+        spdlog::set_level(spdlog::level::trace);
+    }
+    catch (const spdlog::spdlog_ex &ex)
+    {
+        cerr << "ootoc log initialization failed: " << ex.what() << endl;
+    }
+}
+
 TarOverCurl::~TarOverCurl()
 {
     Close();
@@ -34,10 +95,10 @@ bool TarOverCurl::ExecuteCurl()
     quick_return_false(curl_easy_perform(curl));
     long response_code;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    cout << response_code << endl;
+    spdlog::log(level::trace, fmt::format("response_code: {}", response_code));
     if (response_code == 206)
         return true;
-    cerr << "can't not connected." << endl;
+    spdlog::log(level::err, "can't not connected.");
     return false;
 }
 
@@ -49,7 +110,7 @@ bool TarOverCurl::Open(const string &url, const string &fastAux)
     auto node = YAML::Load(aux);
     if (!node.IsMap())
         return false;
-    cout << "aux file loaded." << endl;
+    spdlog::log(level::debug, "aux file loaded.");
     // valiate url
     if (curl)
         curl_easy_cleanup(curl);
@@ -71,7 +132,7 @@ bool TarOverCurl::Open(const string &url, const string &fastAux)
     quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, "0-1"));
     if (!ExecuteCurl())
         return false;
-    cout << "url connected." << endl;
+    spdlog::log(level::info, "url connected.");
     return true;
 }
 
@@ -86,7 +147,7 @@ bool TarOverCurl::ExtractFile(const string &inner_path, std::function<void(const
             return false;
         quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, (beg + "-" + end).c_str()));
         // cout << "Tar url: " << url << endl;
-        cout << "fetching data range: " + beg + "-" + end << endl;
+        spdlog::log(level::info, fmt::format("fetching data range: {}-{}", beg, end));
         quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &handler));
         quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
                                             +[](char *contents, size_t size, size_t nmemb,
@@ -100,7 +161,7 @@ bool TarOverCurl::ExtractFile(const string &inner_path, std::function<void(const
                                             }));
         if (!ExecuteCurl())
             return false;
-        cout << "extract file success: " << inner_path << endl;
+        spdlog::log(level::info, "extract file success: " + inner_path);
         return true;
     }
     return false;
@@ -152,8 +213,8 @@ bool TarParser::Parse()
         string inner_path = th_get_pathname(tar);
         auto sta = tar->offset;
         auto end = sta - 1 + th_get_size(tar);
-        cout << inner_path << endl;
-        cout << tar->offset << endl;
+        // cout << inner_path << endl;
+        // cout << tar->offset << endl;
         ss.str("");
         ss << sta;
         node[inner_path]["start"] = ss.str();
@@ -170,7 +231,7 @@ bool TarParser::Parse()
     ss.str("");
     ss << node;
     output = ss.str();
-    cout << output << endl;
+    // cout << output << endl;
     return true;
 }
 
@@ -193,7 +254,7 @@ void OpkgServer::setServer(const string &addr, long port)
     auto node = YAML::Load(aux);
     if (!node.IsMap())
         return;
-    cout << "aux file loaded." << endl;
+    spdlog::log(level::info, "aux file loaded.");
     auto remote = &this->remote;
     regex reg(".*?/Packages.gz$");
     for (auto &&it : node)
@@ -208,34 +269,33 @@ void OpkgServer::setServer(const string &addr, long port)
             thread in_coming([&inner_path, &remote, size, mtx, data]() {
                 unsigned long long progress = 0;
                 remote->ExtractFile(inner_path, [mtx, data, &progress, size](const string &part_conts) {
+                    if (part_conts.size() == 0)
+                        return;
                     lock_guard<std::mutex> lock(*mtx);
                     *data += part_conts;
                     progress += part_conts.length();
-                    cout << "\rDownload Progress: " << progress << "/" << size << " \t" << ((double)progress) / size * 100 << "%     " << flush;
+                    spdlog::log(level::debug, "Download Progress: {}/{} \t{}%", progress, size, ((double)progress) / size * 100);
                 });
-                cout << "Download completed." << endl;
+                spdlog::log(level::info, "Download completed.");
             });
-            thread out_coming([mtx, data, size, &res]() {
-                res.set_content_provider(
-                    size, // Content length
-                    [mtx, data, size](uint64_t offset, uint64_t length, DataSink &sink) {
-                        lock_guard<std::mutex> lock(*mtx);
-                        cout << "\rUpload Progress: " << offset << "/" << size << " \t" << ((double)offset) / size * 100 << "%     " << flush;
-                        auto d = data->c_str();
-                        sink.write(&d[offset], min(length, data->length() - offset));
-                    },
-                    []() {
-                        cout << "Upload completed." << endl;
-                    });
-            });
-            out_coming.join();
+            res.set_content_provider(
+                size, // Content length
+                [mtx, data, size](uint64_t offset, uint64_t length, DataSink &sink) {
+                    lock_guard<std::mutex> lock(*mtx);
+                    spdlog::log(level::debug, "Upload Progress: {}/{} \t{}%", offset, size, ((double)offset) / size * 100);
+                    auto d = data->c_str();
+                    sink.write(&d[offset], min(length, data->length() - offset));
+                },
+                []() {
+                    spdlog::log(level::info, "Upload completed.");
+                });
             in_coming.join();
         });
         static int num = 1;
         if (regex_match(inner_path, reg))
-            cout << "src/gz " << num++ << " http://" << addr << ':' << port << '/' << inner_path.substr(0, inner_path.size() - 12) << endl;
+            spdlog::log(level::info, fmt::format("src/gz {} http://{}:{}/{}", num++, addr, port, inner_path.substr(0, inner_path.size() - 12)));
     }
-    cout << "prepared." << endl;
+    spdlog::log(level::info, "prepared.");
 }
 
 string OpkgServer::getSubscription(const string &addr, long port, const string &aux)
@@ -256,7 +316,7 @@ string OpkgServer::getSubscription(const string &addr, long port, const string &
 void OpkgServer::Start()
 {
     svr.listen(addr.c_str(), port);
-    cout << "listen error" << endl;
+    spdlog::log(level::critical, "listen error");
 }
 
 } // namespace ootoc
