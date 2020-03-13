@@ -12,11 +12,3 @@ foreach(file ${files})
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     )
 endforeach()
-
-add_executable(main-test src/main-test.cxx)
-target_link_libraries(main-test PRIVATE ootoc)
-add_test(
-    NAME mainTest 
-    COMMAND main-test
-    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-)  
