@@ -1,6 +1,0 @@
-src/gz 1 http://127.0.0.1:21730/latest-Packages/packages/x86_64/routing
-src/gz 2 http://127.0.0.1:21730/latest-Packages/packages/x86_64/telephony
-src/gz 3 http://127.0.0.1:21730/latest-Packages/packages/x86_64/luci
-src/gz 4 http://127.0.0.1:21730/latest-Packages/packages/x86_64/base
-src/gz 5 http://127.0.0.1:21730/latest-Packages/packages/x86_64/packages
-src/gz 6 http://127.0.0.1:21730/latest-Packages/targets/x86/64/packages
