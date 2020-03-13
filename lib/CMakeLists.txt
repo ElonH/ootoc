@@ -73,3 +73,5 @@ add_subdirectory(httplib)
 # endif()
 
 add_subdirectory(CLI11)
+
+find_package(spdlog REQUIRED)
