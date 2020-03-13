@@ -349,8 +349,10 @@ void OpkgServer::setServer(const string &addr, long port)
     spdlog::log(level::info, "prepared.");
 }
 
-string OpkgServer::getSubscription(const string &addr, long port, const string &aux)
+string OpkgServer::getSubscription(const string &addr, long port)
 {
+    if (aux_url != "" && aux == "" && !fetchAux())
+        spdlog::log(level::err, "fetching remote aux error.");
     auto node = YAML::Load(aux);
     regex reg(".*?/Packages.gz$");
     stringstream ss;

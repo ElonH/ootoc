@@ -87,7 +87,7 @@ public:
     bool fetchAux();
     void setRemoteTar(const string &url);
     void setServer(const string &addr, long port);
-    static string getSubscription(const string& addr, long port, const string& aux);
+    string getSubscription(const string &addr, long port);
     void Start();
 };
 } // namespace ootoc
