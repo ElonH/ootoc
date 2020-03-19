@@ -14,13 +14,10 @@ TEST(TarOverCurl, test)
     string content((std::istreambuf_iterator<char>(auxstm)),
                    (std::istreambuf_iterator<char>()));
     auxstm.close();
-    TarOverCurl toc;
-    bool ret;
-    ret = toc.Open("https://github.com/ElonH/ootoc/releases/download/test/Packages.tar", content);
-    ASSERT_EQ(ret, true);
+    TarOverCurl toc("https://cdn.jsdelivr.net/gh/ElonH/ootoc@master/test/data/Packages.tar", content);
     bool connected = false;
-    ret = toc.ExtractFile("Packages/packages/x86_64/routing/Packages", [&](const string &conts) {
-        cout << conts << endl;
+    bool ret = toc.ExtractFile("Packages/packages/x86_64/routing/Packages", [&](const string &conts) {
+        cout << conts;
         connected = true;
     });
     ASSERT_EQ(ret, true);

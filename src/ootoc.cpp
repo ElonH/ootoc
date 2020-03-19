@@ -139,110 +139,18 @@ bool QuickCurl::FetchRange(FallbackFn &&fallback, const string &sta, const strin
     return true;
 }
 
-TarOverCurl::~TarOverCurl()
-{
-    Close();
-}
+TarOverCurl::TarOverCurl(const string &url, const string &fastAux) : url(url), curl(url), aux(YAML::Load(fastAux)) {}
 
-#define quick_return_false(ret) \
-    if (ret != CURLE_OK)        \
-    return false
-
-bool TarOverCurl::ReInitCurl()
+bool TarOverCurl::ExtractFile(const string &inner_path, FallbackFn &&handler)
 {
-    curl_easy_reset(curl);
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_URL, url.c_str()));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L));
-    return true;
-}
-
-bool TarOverCurl::ExecuteCurl()
-{
-    quick_return_false(curl_easy_perform(curl));
-    long response_code;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    spdlog::log(level::trace, fmt::format("response_code: {}", response_code));
-    if (response_code == 206)
-        return true;
-    spdlog::log(level::err, "can't not connected.");
-    return false;
-}
-
-bool TarOverCurl::Open(const string &url, const string &fastAux)
-{
-    this->url = url;
-    this->aux = fastAux;
-    // valiate aux
-    auto node = YAML::Load(aux);
-    if (!node.IsMap())
-        return false;
-    spdlog::log(level::debug, "aux file loaded.");
-    // valiate url
-    if (curl)
-        curl_easy_cleanup(curl);
-    curl = curl_easy_init();
-    if (curl == nullptr)
-        return false;
-    if (!ReInitCurl())
-        return false;
-    /* 
-    * NOTE: Leader '+' trigger conversion from non-captured Lambda Object to plain C pointer
-    * refs: https://stackoverflow.com/a/58154943/12118675
-    */
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-                                        +[](void *contents, size_t size, size_t nmemb, void *userp) -> size_t {
-                                            auto realsize = size * nmemb;
-                                            // cout << realsize << endl;
-                                            return realsize;
-                                        }));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, "0-1"));
-    if (!ExecuteCurl())
-        return false;
-    spdlog::log(level::info, "url connected.");
-    return true;
-}
-
-bool TarOverCurl::ExtractFile(const string &inner_path, std::function<void(const string &)> &&handler)
-{
-    auto node = YAML::Load(aux);
-    if (node[inner_path])
-    {
-        auto beg = node[inner_path]["start"].as<string>();
-        auto end = node[inner_path]["end"].as<string>();
-        if (!ReInitCurl())
-            return false;
-        quick_return_false(curl_easy_setopt(curl, CURLOPT_RANGE, (beg + "-" + end).c_str()));
-        // cout << "Tar url: " << url << endl;
-        spdlog::log(level::info, fmt::format("fetching data range: {}-{}", beg, end));
-        quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &handler));
-        quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-                                            +[](char *contents, size_t size, size_t nmemb,
-                                                const std::function<void(const string &)> *hptr) -> size_t {
-                                                auto realsize = size * nmemb;
-                                                auto &handler = *hptr;
-                                                // cout << string(contents, contents + realsize) << endl;
-                                                handler(string(contents, contents + realsize));
-                                                // cout << realsize << endl;
-                                                return realsize;
-                                            }));
-        if (!ExecuteCurl())
-            return false;
-        spdlog::log(level::info, "extract file success: " + inner_path);
-        return true;
-    }
-    return false;
-}
-
-bool TarOverCurl::Close()
-{
-    if (curl)
-    {
-        curl_easy_cleanup(curl);
-        curl = nullptr;
-    }
+    return_false_log(aux.IsMap(), level::critical, "auxilary data format is error.");
+    return_false_log(aux[inner_path], level::warn, fmt::format("file '{}' not exist in tar or auxilary is out of date.", inner_path));
+    return_false_log(aux[inner_path]["start"], level::critical, fmt::format("node '{}' hasn't sub-node '{}'.", inner_path, "start"));
+    return_false_log(aux[inner_path]["end"], level::critical, fmt::format("node '{}' hasn't sub-node '{}'.", inner_path, "end"));
+    auto beg = aux[inner_path]["start"].as<string>();
+    auto end = aux[inner_path]["end"].as<string>();
+    return_false_log(curl.FetchRange(std::forward<FallbackFn>(handler), beg, end), level::warn, fmt::format("failure to extract file: {}", inner_path));
+    info("extract file success:" + inner_path);
     return true;
 }
 

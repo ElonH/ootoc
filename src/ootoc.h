@@ -23,6 +23,8 @@ class QuickCurl
 {
     CURL *curl = nullptr;
     string url;
+
+public:
     using FallbackFn = std::function<void(const string &)>;
 
 protected:
@@ -53,23 +55,21 @@ public:
 
 class TarOverCurl
 {
-    // TAR *tar = nullptr;
-    CURL *curl = nullptr;
+    QuickCurl curl;
     string url = "";
-    string aux = "";
+    YAML::Node aux;
+    using FallbackFn = QuickCurl::FallbackFn;
 
 public:
-    TarOverCurl() {}
-    ~TarOverCurl();
     /**
      * @brief enstablish a tar node
      * @param url a url path that point to tar file on network.
-     * Note: The remote server recommend support range requests.
+     * Note: The remote server needs support range requests.
      * @param fastAux yaml content that contain file location info in tar.
-     * @return true open success
-     * @return false failure
      */
-    bool Open(const string &url, const string &fastAux);
+    TarOverCurl(const string &url, const string &fastAux);
+    ~TarOverCurl() {}
+
     /**
      * @brief extract a file content in tar.
      * @param inner_path a file path in tar
@@ -77,15 +77,7 @@ public:
      * @return true success
      * @return false failure
      */
-    bool ExtractFile(const string &inner_path, std::function<void(const string &)> &&handler);
-    /**
-     * @brief closing network connection
-     */
-    bool Close();
-
-protected:
-    bool ReInitCurl();
-    bool ExecuteCurl();
+    bool ExtractFile(const string &inner_path, FallbackFn &&handler);
 };
 
 /**
