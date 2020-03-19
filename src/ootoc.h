@@ -17,8 +17,6 @@ class Logger
 {
 public:
     static void start(const string &file_path = "");
-    static bool LogWhenFalse(bool rst, const string &msg);
-    static bool LogWhenFalse(bool rst, spdlog::level::level_enum level, const string &msg);
 };
 
 class QuickCurl
