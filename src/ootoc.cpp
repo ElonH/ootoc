@@ -141,7 +141,7 @@ bool QuickCurl::FetchRange(FallbackFn &&fallback, const string &sta, const strin
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
     spdlog::log(level::trace, fmt::format("response_code: {}", response_code));
     return_false(Logger::LogWhenFalse(response_code == 206, level::err, fmt::format("fetching range error in:\n{}\nresponse_code: {}", url, response_code)));
-    spdlog::log(level::info, fmt::format("success: url[{}] connected.", url));
+    spdlog::log(level::info, fmt::format("fetching range success: {}", url));
     return true;
 }
 
