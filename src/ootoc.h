@@ -5,6 +5,7 @@ extern "C"
 }
 #include <functional>
 #include <httplib/httplib.h>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <yaml-cpp/yaml.h>
 
@@ -14,8 +15,42 @@ using namespace std;
 
 class Logger
 {
-    public:
-    static void start(const string& file_path = "");
+public:
+    static void start(const string &file_path = "");
+    static bool LogWhenFalse(bool rst, const string &msg);
+    static bool LogWhenFalse(bool rst, spdlog::level::level_enum level, const string &msg);
+};
+
+class QuickCurl
+{
+    CURL *curl = nullptr;
+    string url;
+    using FallbackFn = std::function<void(const string &)>;
+
+protected:
+    /**
+     * @brief reset curl option
+     */
+    bool ReInitCurl();
+
+public:
+    QuickCurl(const string &url);
+    ~QuickCurl()
+    {
+        if (curl)
+            curl_easy_cleanup(curl);
+    }
+    /**
+     * @brief validate url existence
+     */
+    bool ConnectionTest();
+    /**
+     * @brief fetching some data of range [sta, end] Tip: not [sta,end)
+     * @param fallback a fallback function that handle data pices by pices
+     * @param sta string of number, default is "0"
+     * @param end string of number, default is "" (mean that fetching to the end of data)
+     */
+    bool FetchRange(FallbackFn &&fallback, const string &sta = "0", const string &end = "");
 };
 
 class TarOverCurl
@@ -84,8 +119,8 @@ class OpkgServer
     long port;
 
 public:
-    void setSubscription(const string& sub_path);
-    void setAuxUrl(const string& url, const string& path);
+    void setSubscription(const string &sub_path);
+    void setAuxUrl(const string &url, const string &path);
     bool fetchAux();
     void setRemoteTar(const string &url);
     void setServer(const string &addr, long port);
