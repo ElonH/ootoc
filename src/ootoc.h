@@ -58,7 +58,10 @@ class TarOverCurl
     QuickCurl curl;
     string url = "";
     YAML::Node aux;
+
+public:
     using FallbackFn = QuickCurl::FallbackFn;
+    using ull = unsigned long long;
 
 public:
     /**
@@ -78,6 +81,10 @@ public:
      * @return false failure
      */
     bool ExtractFile(const string &inner_path, FallbackFn &&handler);
+    shared_ptr<vector<string>> SearchFileLocation(const regex &reg); // TODO: test
+    bool HasFile(const string &inner_path);                          // TODO: test
+    ull GetStarPosByPath(const string &inner_path);                  // TODO: test
+    ull GetEndPosByPath(const string &inner_path);                   // TODO: test
 };
 
 /**
@@ -99,21 +106,23 @@ public:
 
 class OpkgServer
 {
-    httplib::Server svr;
-    string aux = "";
-    string aux_url = "";
-    string aux_path = "";
-    TarOverCurl remote;
-    string addr;
-    string subscription;
-    long port;
+    shared_ptr<httplib::Server> m_svr;
+    shared_ptr<TarOverCurl> m_tar;
 
 public:
-    void setSubscription(const string &sub_path);
-    void setAuxUrl(const string &url, const string &path);
-    bool fetchAux();
-    void setRemoteTar(const string &url);
-    void setServer(const string &addr, long port);
-    void Start();
+    string aux_url = "";
+    string tar_url = "";
+    string subscription_path = "";
+    string local_addr;
+    long local_port;
+
+public:
+    bool Check();
+    bool Start();
+
+private:
+    bool DownloadAux();
+    bool OutputSubscription();
+    bool DeployServer();
 };
 } // namespace ootoc

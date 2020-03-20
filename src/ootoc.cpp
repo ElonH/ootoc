@@ -3,6 +3,7 @@
 #include "spdlog/details/null_mutex.h"
 #include "spdlog/sinks/base_sink.h"
 #include <iostream>
+#include <queue>
 #include <regex>
 
 extern "C"
@@ -154,6 +155,38 @@ bool TarOverCurl::ExtractFile(const string &inner_path, FallbackFn &&handler)
     return true;
 }
 
+shared_ptr<vector<string>> TarOverCurl::SearchFileLocation(const regex &reg)
+{
+    auto path_list = make_shared<vector<string>>();
+    for (auto &&item : aux)
+    {
+        const auto inner_path = item.first.as<string>();
+        if (regex_match(inner_path, reg))
+            path_list->push_back(inner_path);
+    }
+    return path_list;
+}
+
+bool TarOverCurl::HasFile(const string &inner_path)
+{
+    return_false_log(aux[inner_path], level::trace, fmt::format("file {} not exist in TarOverCurl.", inner_path));
+    return true;
+}
+
+TarOverCurl::ull TarOverCurl::GetStarPosByPath(const string &inner_path)
+{
+    if (HasFile(inner_path))
+        return aux[inner_path]["start"].as<ull>();
+    return 0;
+}
+
+TarOverCurl::ull TarOverCurl::GetEndPosByPath(const string &inner_path)
+{
+    if (HasFile(inner_path))
+        return aux[inner_path]["end"].as<ull>();
+    return 0;
+}
+
 TarParser::~TarParser()
 {
     Close();
@@ -218,132 +251,176 @@ const string &TarParser::GetOutput()
     return this->output;
 }
 
-void OpkgServer::setAuxUrl(const string &url, const string &path)
+bool OpkgServer::DownloadAux()
 {
-    aux_url = url;
-    aux_path = path;
-    fstream auxstm(aux_path, ios::in);
-    string aux_content((std::istreambuf_iterator<char>(auxstm)),
-                       (std::istreambuf_iterator<char>()));
-    auxstm.close();
-    aux = aux_content;
-}
-
-bool OpkgServer::fetchAux()
-{
-    string remote_aux_content;
-    spdlog::log(level::info, fmt::format("fetching aux from {}", aux_url));
-    auto curl = curl_easy_init();
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_URL, aux_url.c_str()));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEDATA, &remote_aux_content));
-    quick_return_false(curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-                                        +[](char *contents, size_t size, size_t nmemb,
-                                            string *dataptr) -> size_t {
-                                            auto realsize = size * nmemb;
-                                            auto &remote_aux_content = *dataptr;
-                                            remote_aux_content += string(contents, contents + realsize);
-                                            if (realsize)
-                                                spdlog::log(level::debug, fmt::format("aux progress: {}", remote_aux_content.size()));
-                                            return realsize;
-                                        }));
-    quick_return_false(curl_easy_perform(curl));
-    spdlog::log(level::info, "fetch aux completed.");
-    aux = remote_aux_content;
-    ofstream ofs(aux_path, ios::out);
-    ofs << aux;
-    ofs.close();
-    spdlog::log(level::info, "saved aux.");
+    QuickCurl curl(this->aux_url);
+    auto contents = make_shared<string>();
+    return_false_log(curl.FetchRange([contents](const string &part_conts) {
+        contents->append(part_conts);
+    }),
+                     level::err, "download auxilary file error");
+    info("auxilary file download completed");
+    info(fmt::format("auxilary file size: {}", contents->length()));
+    m_tar = make_shared<TarOverCurl>(tar_url, *contents);
     return true;
 }
 
-void OpkgServer::setRemoteTar(const string &url)
+bool OpkgServer::OutputSubscription()
 {
-    remote.Open(url, aux);
-}
-
-void OpkgServer::setSubscription(const string &sub_path)
-{
-    subscription = sub_path;
-}
-
-void OpkgServer::setServer(const string &addr, long port)
-{
-    if (aux_url != "" && aux == "" && !fetchAux())
-        spdlog::log(level::err, "fetching remote aux error.");
-    this->addr = addr;
-    this->port = port;
-    using namespace httplib;
-    auto node = YAML::Load(aux);
-    if (!node.IsMap())
-        return;
-    spdlog::log(level::info, "aux file loaded.");
-    auto remote = &this->remote;
-    regex reg(".*?/Packages.gz$");
-    stringstream ss;
-    for (auto &&it : node)
+    static int num = 1;
+    if (subscription_path == "")
     {
-        const auto inner_path = it.first.as<string>();
-        auto beg = node[inner_path]["start"].as<unsigned long long>();
-        auto end = node[inner_path]["end"].as<unsigned long long>();
+        warn("'subscription path' is empty, disable subscription.");
+        return true;
+    }
+    string subscription_contents;
+    regex reg(".*?/Packages\\.gz$");
+    auto list = m_tar->SearchFileLocation(reg);
+    for (auto &&path : *list)
+        subscription_contents += fmt::format("src/gz {} http://{}:{}/{}\n", num++, local_addr, local_port, path.substr(0, path.size() - 12));
+
+    info(fmt::format("subscription: save content to '{}'\n{}", subscription_path, subscription_contents));
+    ofstream ofs(subscription_path, ios::out);
+    return_false_log(!ofs.fail(), level::err, "subscription file write failure.");
+    ofs << subscription_contents;
+    ofs.close();
+    return true;
+}
+
+bool OpkgServer::Check()
+{
+    info(fmt::format("auxilary url: {}", aux_url));
+    info(fmt::format("tar url: {}", tar_url));
+    info(fmt::format("subscription output path: {}", subscription_path));
+    info(fmt::format("local address: {}", local_addr));
+    info(fmt::format("local port: {}", local_port));
+
+    return_false_log(aux_url != "", level::critical, "not provide auxilary url");
+    return_false_log(tar_url != "", level::critical, "not provide tar url");
+    return_false(DownloadAux());
+
+    return_false(OutputSubscription());
+    return_false(DeployServer());
+    return true;
+}
+
+struct SlidingWindow
+{
+    mutex mtx;
+    list<string> buffer;
+    using ull = unsigned long long;
+    ull beg = 0, end = 0;
+    // SlidingWindow(){
+    //     buffer = list<string>();
+    //     info("{}",buffer.size());
+    // }
+    void push(const string &in)
+    {
+        lock_guard<mutex> lock(mtx);
+        buffer.push_back(in);
+        end += in.size();
+    }
+    string *get()
+    {
+        lock_guard<mutex> lock(mtx);
+        if (buffer.size() == 0)
+            return nullptr;
+        return &buffer.front();
+    }
+    void MoveTo(ull new_beg)
+    {
+        lock_guard<mutex> lock(mtx);
+        if (new_beg <= beg)
+            return;
+        auto remain = new_beg - beg;
+        while (remain > 0)
+        {
+            if (buffer.size() == 0)
+                return;
+            auto part_size = buffer.front().size();
+            if (part_size <= remain)
+            {
+                beg += part_size;
+                buffer.pop_front();
+                remain -= part_size;
+            }
+            else
+            {
+                buffer.front().substr(remain);
+                beg += remain;
+                remain = 0;
+            }
+        }
+    }
+};
+
+bool OpkgServer::DeployServer()
+{
+    debug("Deploying server.");
+    using namespace httplib;
+    auto svr = m_svr = make_shared<Server>();
+    auto tar = m_tar;
+    m_svr->Get("/stop", [svr](const Request &req, Response &res) {
+        svr->stop();
+    });
+    m_svr->Get("/.*?/(.*?\\.ipk|Packages(\\.gz|\\.sig|\\.manifest)?)$", [tar](const Request &req, Response &res) {
+        auto inner_path = make_shared<string>(req.path.substr(1));
+        trace("request " + req.path);
+        if (!tar->HasFile(*inner_path))
+        {
+            debug(fmt::format("file not exist, return 404: {}", *inner_path));
+            res.status = 404;
+            return;
+        }
+        auto data = make_shared<SlidingWindow>();
+        auto beg = tar->GetStarPosByPath(*inner_path);
+        auto end = tar->GetEndPosByPath(*inner_path);
         auto size = end - beg + 1;
-        this->svr.Get(("/" + inner_path).c_str(), [remote, inner_path, size](const Request &req, Response &res) {
-            auto mtx = make_shared<std::mutex>();
-            auto data = make_shared<string>(); // TODO: redule useless memory space
-            thread in_coming([&inner_path, &remote, size, mtx, data]() {
-                unsigned long long progress = 0;
-                remote->ExtractFile(inner_path, [mtx, data, &progress, size](const string &part_conts) {
-                    if (part_conts.size() == 0)
-                        return;
-                    lock_guard<std::mutex> lock(*mtx);
-                    *data += part_conts;
-                    progress += part_conts.length();
-                    spdlog::log(level::debug, "Download Progress: {}/{} \t{}%", progress, size, ((double)progress) / size * 100);
-                });
-                spdlog::log(level::info, "Download completed.");
+        thread in_coming([tar, size, inner_path, data]() {
+            TarOverCurl::ull progress = 0;
+
+            tar->ExtractFile(*inner_path, [&progress, size, data](const string &part_conts) {
+                if (part_conts.size() == 0)
+                    return;
+                data->push(part_conts);
+                progress += part_conts.length();
+                debug(fmt::format(FMT_STRING("Download Progress: {}/{} {:*^15.2f}"), progress, size, progress * 100.0 / size));
             });
+        });
+        thread out_coming([&]() {
             res.set_content_provider(
                 size, // Content length
-                [mtx, data, size](uint64_t offset, uint64_t length, DataSink &sink) {
-                    mtx->lock();
-                    if (data->length() - offset == 0)
+                [data, size](uint64_t offset, uint64_t length, DataSink &sink) {
+                    // sync offset
+                    data->MoveTo(offset);
+
+                    spdlog::log(level::debug, "Upload Progress: {}/{} {:*^15.2f}", offset, size, offset * 100.0 / size);
+                    auto data_part = data->get();
+                    if (data_part == nullptr)
                     {
-                        mtx->unlock();
                         std::this_thread::sleep_for(2s);
                         return;
                     }
-                    spdlog::log(level::debug, "Upload Progress: {}/{} \t{}%", offset, size, ((double)offset) / size * 100);
-                    auto d = data->c_str();
-                    sink.write(&d[offset], min(length, data->length() - offset));
-                    mtx->unlock();
+                    sink.write(data_part->c_str(), data_part->size());
                 },
-                []() {
-                    spdlog::log(level::info, "Upload completed.");
+                [size]() {
+                    spdlog::log(level::debug, "Upload Progress: {0}/{0} {1:*^15.2f}", size, 100.0);
                 });
-            in_coming.join();
         });
-        static int num = 1;
-        if (regex_match(inner_path, reg))
-            ss << fmt::format("src/gz {} http://{}:{}/{}", num++, addr, port, inner_path.substr(0, inner_path.size() - 12)) << endl;
-    }
-    spdlog::log(level::info, ss.str());
-    if (subscription != "")
-    {
-        ofstream ofs(subscription, ios::out);
-        ofs << ss.str();
-        ofs.close();
-        spdlog::log(level::info, fmt::format("subscription saved to {}", subscription));
-    }
-    spdlog::log(level::info, "prepared.");
+        in_coming.join();
+        out_coming.join();
+    });
+    spdlog::log(level::info, "Deploy done.");
+    return true;
 }
 
-void OpkgServer::Start()
+bool OpkgServer::Start()
 {
-    svr.listen(addr.c_str(), port);
+    return_false_log(m_svr.get() != nullptr, level::critical, "server not deploy");
+    return_false_log(m_tar.get() != nullptr, level::critical, "TarOvercurl isn't setup");
+    m_svr->listen(local_addr.c_str(), local_port);
     spdlog::log(level::critical, "listen error");
+    return false;
 }
 
 } // namespace ootoc
