@@ -42,7 +42,7 @@ jobs:
           sudo make install
       - name: Make
         run: |
-          cmake -DOOTOC_BUILDIN_LIBTAR:BOOL=OFF .
+          cmake .
           make
           make test
           sudo make install
