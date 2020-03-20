@@ -255,8 +255,13 @@ bool OpkgServer::DownloadAux()
 {
     QuickCurl curl(this->aux_url);
     auto contents = make_shared<string>();
-    return_false_log(curl.FetchRange([contents](const string &part_conts) {
+    auto length = 0ULL;
+    return_false_log(curl.FetchRange([contents, &length](const string &part_conts) {
+        if (part_conts.size() == 0)
+            return;
         contents->append(part_conts);
+        debug("auxilary file downloaded: {}+{}", length, part_conts.size());
+        length += part_conts.size();
     }),
                      level::err, "download auxilary file error");
     info("auxilary file download completed");
