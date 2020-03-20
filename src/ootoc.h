@@ -81,10 +81,10 @@ public:
      * @return false failure
      */
     bool ExtractFile(const string &inner_path, FallbackFn &&handler);
-    shared_ptr<vector<string>> SearchFileLocation(const regex &reg); // TODO: test
-    bool HasFile(const string &inner_path);                          // TODO: test
-    ull GetStarPosByPath(const string &inner_path);                  // TODO: test
-    ull GetEndPosByPath(const string &inner_path);                   // TODO: test
+    shared_ptr<vector<string>> SearchFileLocation(const regex &reg); 
+    bool HasFile(const string &inner_path);                          
+    ull GetStarPosByPath(const string &inner_path);                  
+    ull GetEndPosByPath(const string &inner_path);                   
 };
 
 /**

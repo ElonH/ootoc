@@ -22,4 +22,18 @@ TEST(TarOverCurl, test)
     });
     ASSERT_EQ(ret, true);
     ASSERT_EQ(connected, true);
+
+    auto ans_list = toc.SearchFileLocation(regex(".*?/README.md"));
+    ASSERT_EQ(ans_list->size(), 1);
+    ASSERT_EQ(*ans_list->begin(), "Packages/txt/README.md");
+
+    auto est = toc.HasFile("Packages/packages/x86_64/routing/bmx7-json_7.1.1-2_x86_64.ipk");
+    ASSERT_EQ(est, true);
+    est = toc.HasFile("Packages/packages/x86_64/routing/bmx7-");
+    ASSERT_EQ(est, false);
+
+    auto pos = toc.GetStarPosByPath("Packages/packages/x86_64/routing/Packages.gz");
+    ASSERT_EQ(pos, 59392ull);
+    pos = toc.GetEndPosByPath("Packages/packages/x86_64/routing/Packages.gz");
+    ASSERT_EQ(pos, 59855ull);
 }
