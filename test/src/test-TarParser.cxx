@@ -21,3 +21,18 @@ TEST(TarParser, test)
     f << p.GetOutput();
     f.close();
 }
+
+TEST(TarParser, bigfile)
+{
+    TarParser p;
+    bool ret;
+    ret = p.Open("./test/data/random.tar");
+    ASSERT_EQ(ret, true);
+    ret = p.Parse();
+    ASSERT_EQ(ret, true);
+    ret = p.Close();
+    ASSERT_EQ(ret, true);
+    auto f = fstream("./test/data/random.yml", ios::out);
+    f << p.GetOutput();
+    f.close();
+}
