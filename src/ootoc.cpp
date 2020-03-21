@@ -343,18 +343,21 @@ public:
         return true;
     }
 
-    string *get()
+    shared_ptr<string> get()
     {
         lock_guard<mutex> lock(mtx);
+        auto ans = make_shared<string>();
         if (buffer.size() == 0)
-            return nullptr;
+            return ans;
         while (buffer.front().size() == 0)
         {
             buffer.pop_front();
             if (buffer.size() == 0)
-                return nullptr;
+                return ans;
         }
-        return &buffer.front();
+        for (auto &&item : buffer)
+            *ans += item;
+        return ans;
     }
 
     bool MoveTo(ull new_beg)
@@ -453,19 +456,20 @@ bool OpkgServer::DeployServer()
                 }
 
                 auto data_part = data->get();
-                if (data_part == nullptr)
+                if (data_part->size() == 0)
                 {
                     std::this_thread::sleep_for(0.01s);
                     return;
                 }
                 sink.write(data_part->c_str(), data_part->size());
+                offset += data_part->size();
                 debug("Upload Progress: {}/{} {:*^15.2f}", offset, size, offset * 100.0 / size);
             },
             [size, data]() {
                 if (data->IsInterrupt())
                     error("Transfer file status: failure");
                 else if (data->IsDone())
-                    debug("Upload Progress: {0}/{0} {1:*^15.2f}", size, 100.0);
+                    debug("Transfer file status: success");
                 else
                     critical("Transfer file status: Unknow. Please report this bug.");
             });
