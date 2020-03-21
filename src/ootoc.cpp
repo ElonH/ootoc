@@ -332,8 +332,10 @@ public:
     void Done() { done.store(true); }
     bool IsInterrupt() { return interrupt.load(); }
     bool IsDone() { return done.load(); }
-    bool push(const string &in)
+    bool push(const string &in, bool done = false)
     {
+        if (IsDone() || IsInterrupt())
+            return true;
         if (in.size() == 0)
             return true;
         lock_guard<mutex> lock(mtx);
@@ -341,6 +343,8 @@ public:
             return false;
         buffer.push_back(in);
         end += in.size();
+        if (done)
+            Done();
         return true;
     }
 
@@ -428,11 +432,11 @@ bool OpkgServer::DeployServer()
                 tar->ExtractFile(*inner_path, [&progress, size, data](const string &part_conts) {
                     if (part_conts.size() == 0)
                         return;
-                    while (false == data->push(part_conts))
+                    progress += part_conts.length();
+                    while (false == data->push(part_conts, progress == size))
                         std::this_thread::sleep_for(2s);
                     if (data->IsInterrupt())
                         throw InterruptException();
-                    progress += part_conts.length();
                     debug(fmt::format(FMT_STRING("Download Progress: {}/{} {:*^15.2f}"), progress, size, progress * 100.0 / size));
                 });
             }
