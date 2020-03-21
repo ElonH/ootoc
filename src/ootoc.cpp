@@ -140,10 +140,11 @@ bool QuickCurl::FetchRange(FallbackFn &&fallback, const string &sta, const strin
     return true;
 }
 
-TarOverCurl::TarOverCurl(const string &url, const string &fastAux) : url(url), curl(url), aux(YAML::Load(fastAux)) {}
+TarOverCurl::TarOverCurl(const string &url, const string &fastAux) : url(url), aux(YAML::Load(fastAux)) {}
 
 bool TarOverCurl::ExtractFile(const string &inner_path, FallbackFn &&handler)
 {
+    QuickCurl curl(url);
     return_false_log(aux.IsMap(), level::critical, "auxilary data format is error.");
     return_false_log(aux[inner_path], level::warn, fmt::format("file '{}' not exist in tar or auxilary is out of date.", inner_path));
     return_false_log(aux[inner_path]["start"], level::critical, fmt::format("node '{}' hasn't sub-node '{}'.", inner_path, "start"));
@@ -406,7 +407,7 @@ bool OpkgServer::DeployServer()
     });
     m_svr->Get("/.*?/(.*?\\.ipk|Packages(\\.gz|\\.sig|\\.manifest)?)$", [tar](const Request &req, Response &res) {
         auto inner_path = make_shared<string>(req.path.substr(1));
-        trace("request " + req.path);
+        debug("request " + req.path);
         if (!tar->HasFile(*inner_path))
         {
             debug(fmt::format("file not exist, return 404: {}", *inner_path));
@@ -437,6 +438,7 @@ bool OpkgServer::DeployServer()
             }
             catch (InterruptException &)
             {
+                warn("Download Abort.");
                 return;
             }
             data->Done();
@@ -471,7 +473,10 @@ bool OpkgServer::DeployServer()
                 else if (data->IsDone())
                     debug("Transfer file status: success");
                 else
-                    critical("Transfer file status: Unknow. Please report this bug.");
+                {
+                    critical("Transfer file status: Abort");
+                    data->Interrupt();
+                }
             });
     });
     spdlog::log(level::info, "Deploy done.");

@@ -55,7 +55,6 @@ public:
 
 class TarOverCurl
 {
-    QuickCurl curl;
     string url = "";
     YAML::Node aux;
 
