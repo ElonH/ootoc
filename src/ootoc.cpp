@@ -309,39 +309,70 @@ bool OpkgServer::Check()
     return true;
 }
 
-struct SlidingWindow
+class SlidingWindow
 {
     mutex mtx;
     list<string> buffer;
     using ull = unsigned long long;
     ull beg = 0, end = 0;
-    // SlidingWindow(){
-    //     buffer = list<string>();
-    //     info("{}",buffer.size());
-    // }
-    void push(const string &in)
+    atomic<bool> done, interrupt;
+
+public:
+    SlidingWindow()
     {
+        done.store(false);
+        interrupt.store(false);
+    }
+    void Interrupt()
+    {
+        interrupt.store(true);
+        buffer.clear();
+    }
+    void Done() { done.store(true); }
+    bool IsInterrupt() { return interrupt.load(); }
+    bool IsDone() { return done.load(); }
+    bool push(const string &in)
+    {
+        if (in.size() == 0)
+            return true;
         lock_guard<mutex> lock(mtx);
+        if (buffer.size() == buffer.max_size())
+            return false;
         buffer.push_back(in);
         end += in.size();
+        return true;
     }
+
     string *get()
     {
         lock_guard<mutex> lock(mtx);
         if (buffer.size() == 0)
             return nullptr;
+        while (buffer.front().size() == 0)
+        {
+            buffer.pop_front();
+            if (buffer.size() == 0)
+                return nullptr;
+        }
         return &buffer.front();
     }
-    void MoveTo(ull new_beg)
+
+    bool MoveTo(ull new_beg)
     {
         lock_guard<mutex> lock(mtx);
-        if (new_beg <= beg)
-            return;
+        if (new_beg < beg)
+        {
+            critical("Slidling Windows can't move beg back(from {} to {})", beg, new_beg);
+            return false;
+        }
         auto remain = new_beg - beg;
         while (remain > 0)
         {
             if (buffer.size() == 0)
-                return;
+            {
+                critical("beg isn't sync with buffer size, Please report this bug");
+                return false;
+            }
             auto part_size = buffer.front().size();
             if (part_size <= remain)
             {
@@ -356,6 +387,7 @@ struct SlidingWindow
                 remain = 0;
             }
         }
+        return true;
     }
 };
 
@@ -367,6 +399,7 @@ bool OpkgServer::DeployServer()
     auto tar = m_tar;
     m_svr->Get("/stop", [svr](const Request &req, Response &res) {
         svr->stop();
+        info("shutdown opkg server");
     });
     m_svr->Get("/.*?/(.*?\\.ipk|Packages(\\.gz|\\.sig|\\.manifest)?)$", [tar](const Request &req, Response &res) {
         auto inner_path = make_shared<string>(req.path.substr(1));
@@ -383,37 +416,59 @@ bool OpkgServer::DeployServer()
         auto size = end - beg + 1;
         thread in_coming([tar, size, inner_path, data]() {
             TarOverCurl::ull progress = 0;
-
-            tar->ExtractFile(*inner_path, [&progress, size, data](const string &part_conts) {
-                if (part_conts.size() == 0)
-                    return;
-                data->push(part_conts);
-                progress += part_conts.length();
-                debug(fmt::format(FMT_STRING("Download Progress: {}/{} {:*^15.2f}"), progress, size, progress * 100.0 / size));
-            });
-        });
-        thread out_coming([&]() {
-            res.set_content_provider(
-                size, // Content length
-                [data, size](uint64_t offset, uint64_t length, DataSink &sink) {
-                    // sync offset
-                    data->MoveTo(offset);
-
-                    spdlog::log(level::debug, "Upload Progress: {}/{} {:*^15.2f}", offset, size, offset * 100.0 / size);
-                    auto data_part = data->get();
-                    if (data_part == nullptr)
-                    {
-                        std::this_thread::sleep_for(2s);
+            struct InterruptException : public std::exception
+            {
+            };
+            try
+            {
+                tar->ExtractFile(*inner_path, [&progress, size, data](const string &part_conts) {
+                    if (part_conts.size() == 0)
                         return;
-                    }
-                    sink.write(data_part->c_str(), data_part->size());
-                },
-                [size]() {
-                    spdlog::log(level::debug, "Upload Progress: {0}/{0} {1:*^15.2f}", size, 100.0);
+                    while (false == data->push(part_conts))
+                        std::this_thread::sleep_for(2s);
+                    if (data->IsInterrupt())
+                        throw InterruptException();
+                    progress += part_conts.length();
+                    debug(fmt::format(FMT_STRING("Download Progress: {}/{} {:*^15.2f}"), progress, size, progress * 100.0 / size));
                 });
+            }
+            catch (InterruptException &)
+            {
+                return;
+            }
+            data->Done();
+            if (progress != size)
+                data->Interrupt();
         });
-        in_coming.join();
-        out_coming.join();
+        in_coming.detach();
+        res.set_content_provider(
+            size, // Content length
+            [data, size](uint64_t offset, uint64_t length, DataSink &sink) {
+                // sync offset
+                if (data->MoveTo(offset) == false)
+                {
+                    data->Interrupt();
+                    sink.done();
+                    return;
+                }
+
+                auto data_part = data->get();
+                if (data_part == nullptr)
+                {
+                    std::this_thread::sleep_for(0.01s);
+                    return;
+                }
+                sink.write(data_part->c_str(), data_part->size());
+                debug("Upload Progress: {}/{} {:*^15.2f}", offset, size, offset * 100.0 / size);
+            },
+            [size, data]() {
+                if (data->IsInterrupt())
+                    error("Transfer file status: failure");
+                else if (data->IsDone())
+                    debug("Upload Progress: {0}/{0} {1:*^15.2f}", size, 100.0);
+                else
+                    critical("Transfer file status: Unknow. Please report this bug.");
+            });
     });
     spdlog::log(level::info, "Deploy done.");
     return true;
@@ -423,8 +478,7 @@ bool OpkgServer::Start()
 {
     return_false_log(m_svr.get() != nullptr, level::critical, "server not deploy");
     return_false_log(m_tar.get() != nullptr, level::critical, "TarOvercurl isn't setup");
-    m_svr->listen(local_addr.c_str(), local_port);
-    spdlog::log(level::critical, "listen error");
+    return_false_log(m_svr->listen(local_addr.c_str(), local_port), level::critical, "listen error");
     return false;
 }
 
