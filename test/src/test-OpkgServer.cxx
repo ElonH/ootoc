@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 using namespace ootoc;
 TEST(OpkgServer, test)
@@ -21,11 +22,15 @@ TEST(OpkgServer, test)
     std::this_thread::sleep_for(1s);
     QuickCurl c(fmt::format("http://{}:{}/Packages/packages/x86_64/routing/Packages", s.local_addr, s.local_port));
     auto contents = make_shared<string>();
+    hash<string> hasher;
     c.FetchRange([contents](const string &part_contents) {
         *contents += part_contents;
     });
     spdlog::info(*contents);
     ASSERT_EQ(contents->size(), 708);
+    auto hash_rst = hasher(*contents);
+    spdlog::info("hash: {}", hash_rst);
+    ASSERT_EQ(hash_rst, 7460544817086421715);
     QuickCurl d(fmt::format("http://{}:{}/stop", s.local_addr, s.local_port));
     d.FetchRange([](const string &) {});
     t.join();
@@ -44,11 +49,16 @@ TEST(OpkgServer, bigfile)
     std::this_thread::sleep_for(1s);
     QuickCurl c(fmt::format("http://{}:{}/123/random.ipk", s.local_addr, s.local_port));
     auto length = 0ULL;
+    auto contents = make_shared<string>();
+    hash<string> hasher;
     c.FetchRange([&length](const string &part_contents) {
         length += part_contents.size();
     });
     spdlog::info("{}", length);
     ASSERT_EQ(length, 10485760);
+    auto hash_rst = hasher(*contents);
+    spdlog::info("hash: {}", hash_rst);
+    ASSERT_EQ(hash_rst, 6142509188972423790);
     QuickCurl d(fmt::format("http://{}:{}/stop", s.local_addr, s.local_port));
     d.FetchRange([](const string &) {});
     t.join();
